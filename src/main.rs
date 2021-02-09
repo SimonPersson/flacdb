@@ -14,6 +14,7 @@ fn main() {
 
 fn run() -> Result<(), error::Error> {
     let args = lapp::parse_args(HELP_STR);
+    let rebuild = args.get_bool("rebuild");
     let flac_path = args.get_string("dir");
     let db_path = args.get_string("db");
     let mut v = vec![];
@@ -23,6 +24,10 @@ fn run() -> Result<(), error::Error> {
     {
         tx.execute(FLACS_SCHEMA, params![])?;
         tx.execute(UPDATES_SCHEMA, params![])?;
+	if rebuild {
+        tx.execute(TRUNCATE_FLACS_QUERY , params![])?;
+        tx.execute(TRUNCATE_UPDATES_QUERY, params![])?;
+	}
         let last_update: Option<i64> = tx.query_row(
             "select coalesce(max(timestamp),0) from update_history;",
             NO_PARAMS,
@@ -100,8 +105,11 @@ fn entry_is_modified_after(last_update: SystemTime, entry: &DirEntry) -> bool {
 const HELP_STR: &str = "
 Searches for flac files and inserts their metadata to a sqlite database:
 Usage: flacdb <dir> <path>
+    --rebuild rebuild database from scratch instead of incremental update
     <dir> (string) path to a directory containing flac files
     <db> (string) path to a database file (will be created if it does not exist)";
 
 const FLACS_SCHEMA: &str = "create table if not exists flacs(path, key, value);";
+const TRUNCATE_FLACS_QUERY: &str = "delete from flacs;";
+const TRUNCATE_UPDATES_QUERY: &str = "delete from update_history;";
 const UPDATES_SCHEMA: &str = "create table if not exists update_history(timestamp);";
