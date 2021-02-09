@@ -1,3 +1,4 @@
+use rusqlite::Error as RusqliteError;
 use std::convert::From;
 use std::fmt;
 use std::io;
@@ -9,6 +10,7 @@ pub enum Error {
     Utf8(std::str::Utf8Error),
     MalformedVorbisComment(String),
     InvalidFlacHeader(PathBuf),
+    Sqlite(RusqliteError),
 }
 
 impl fmt::Display for Error {
@@ -18,6 +20,7 @@ impl fmt::Display for Error {
             Error::Utf8(e) => write!(f, "UTF8 error: {}", e),
             Error::MalformedVorbisComment(e) => write!(f, "Malformed vorbis comment: {}", e),
             Error::InvalidFlacHeader(p) => write!(f, "Invalid flac file: {}", p.display()),
+            Error::Sqlite(e) => write!(f, "Sqlite error: {}", e),
         }
     }
 }
@@ -33,5 +36,11 @@ impl From<io::Error> for Error {
 impl From<std::str::Utf8Error> for Error {
     fn from(e: std::str::Utf8Error) -> Error {
         Error::Utf8(e)
+    }
+}
+
+impl From<RusqliteError> for Error {
+    fn from(e: rusqlite::Error) -> Error {
+        Error::Sqlite(e)
     }
 }
