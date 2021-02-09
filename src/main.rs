@@ -35,7 +35,7 @@ fn run() -> Result<(), error::Error> {
         )?;
         let last_update = epoch_to_system_time(last_update.unwrap_or(0) as u64);
 
-        let mut stmt = tx.prepare("insert into flacs(path, key, value) values (?1, ?2, ?3)")?;
+        let mut stmt = tx.prepare("insert into flacs(file_dir, file_path, key, value) values (?1, ?2, ?3, ?4)")?;
 
         for file in WalkDir::new(flac_path)
             .follow_links(true)
@@ -50,7 +50,7 @@ fn run() -> Result<(), error::Error> {
             if let Ok(file) = file {
                 let mut vorbis_comments = metaflac::read_from(file.path().into(), &mut v)?;
                 while let Ok(Some((key, val))) = vorbis_comments.next(&v) {
-                    stmt.execute(params![file.path().to_string_lossy(), key, val])?;
+                    stmt.execute(params![file.path().parent().map(|p| p.to_string_lossy()).unwrap_or_else(|| "".into()), file.path().to_string_lossy(), key, val])?;
                 }
             }
         }
@@ -109,7 +109,7 @@ Usage: flacdb <dir> <path>
     <dir> (string) path to a directory containing flac files
     <db> (string) path to a database file (will be created if it does not exist)";
 
-const FLACS_SCHEMA: &str = "create table if not exists flacs(path, key, value);";
+const FLACS_SCHEMA: &str = "create table if not exists flacs(file_dir, file_path, key, value);";
 const TRUNCATE_FLACS_QUERY: &str = "delete from flacs;";
 const TRUNCATE_UPDATES_QUERY: &str = "delete from update_history;";
 const UPDATES_SCHEMA: &str = "create table if not exists update_history(timestamp);";
