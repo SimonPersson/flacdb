@@ -113,7 +113,7 @@ fn entry_is_modified_after(last_update: SystemTime, entry: &DirEntry) -> bool {
 }
 
 const HELP_STR: &str = "
-Searches for flac files and inserts their metadata to a sqlite database:
+Searches directory for flac files and inserts their metadata to a sqlite database:
 Usage: flacdb <dir> <path>
     --rebuild rebuild database from scratch instead of incremental update
     <dir> (string) path to a directory containing flac files
