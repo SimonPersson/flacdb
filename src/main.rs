@@ -1,4 +1,3 @@
-use lapp;
 use rusqlite::{params, Connection, NO_PARAMS};
 use std::time::{Duration, SystemTime};
 use walkdir::{DirEntry, WalkDir};
@@ -98,10 +97,11 @@ fn entry_is_modified_after(last_update: SystemTime, entry: &DirEntry) -> bool {
         .unwrap_or(false)
 }
 
-const HELP_STR: &'static str = "
+const HELP_STR: &str = "
 Searches for flac files and inserts their metadata to a sqlite database:
 Usage: flacdb <dir> <path>
     <dir> (string) path to a directory containing flac files
     <db> (string) path to a database file (will be created if it does not exist)";
 
-const SCHEMA: &'static str = "create table if not exists flacs(path, key, value); truncate flacs;";
+const FLACS_SCHEMA: &str = "create table if not exists flacs(path, key, value);";
+const UPDATES_SCHEMA: &str = "create table if not exists update_history(timestamp);";
