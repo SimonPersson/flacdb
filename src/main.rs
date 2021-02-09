@@ -1,6 +1,7 @@
 use lapp;
-use rusqlite::{params, Connection};
-use walkdir;
+use rusqlite::{params, Connection, NO_PARAMS};
+use std::time::{Duration, SystemTime};
+use walkdir::{DirEntry, WalkDir};
 
 mod error;
 mod metaflac;
@@ -21,13 +22,26 @@ fn run() -> Result<(), error::Error> {
     let mut conn = Connection::open(db_path)?;
     let tx = conn.transaction()?;
     {
-        tx.execute(SCHEMA, params![])?;
+        tx.execute(FLACS_SCHEMA, params![])?;
+        tx.execute(UPDATES_SCHEMA, params![])?;
+        let last_update: Option<i64> = tx.query_row(
+            "select coalesce(max(timestamp),0) from update_history;",
+            NO_PARAMS,
+            |row| row.get(0),
+        )?;
+        let last_update = epoch_to_system_time(last_update.unwrap_or(0) as u64);
+
         let mut stmt = tx.prepare("insert into flacs(path, key, value) values (?1, ?2, ?3)")?;
 
-        for file in walkdir::WalkDir::new(flac_path)
+        for file in WalkDir::new(flac_path)
             .follow_links(true)
             .into_iter()
-            .filter(is_flac_file)
+            .filter_entry(|e| filter(last_update, e))
+            .filter(|re| {
+                re.as_ref()
+                    .map(|e| e.file_type().is_file())
+                    .unwrap_or(false)
+            })
         {
             if let Ok(file) = file {
                 let mut vorbis_comments = metaflac::read_from(file.path().into(), &mut v)?;
@@ -36,22 +50,52 @@ fn run() -> Result<(), error::Error> {
                 }
             }
         }
+        let now = system_time_to_epoch(SystemTime::now());
+        tx.execute(
+            "insert into update_history(timestamp) values (?1)",
+            params![now as i64],
+        )?;
     }
 
     tx.commit()?;
     Ok(())
 }
 
-fn is_flac_file(entry: &Result<walkdir::DirEntry, walkdir::Error>) -> bool {
-    if let Ok(entry) = entry {
-        entry
-            .file_name()
-            .to_str()
-            .map(|s| s.ends_with("flac"))
-            .unwrap_or(false)
-    } else {
-        false
-    }
+fn system_time_to_epoch(st: SystemTime) -> u64 {
+    st.duration_since(SystemTime::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+fn epoch_to_system_time(epoch: u64) -> SystemTime {
+    SystemTime::UNIX_EPOCH
+        .checked_add(Duration::from_secs(epoch))
+        .expect("Cannot convert epoch to SystemTime.")
+}
+
+fn filter(last_update: SystemTime, entry: &DirEntry) -> bool {
+    entry.file_type().is_dir()
+        || (entry.file_type().is_file()
+            && entry_is_flac(entry)
+            && entry_is_modified_after(last_update, entry))
+}
+
+fn entry_is_flac(entry: &DirEntry) -> bool {
+    entry
+        .file_name()
+        .to_str()
+        .map(|s| s.to_ascii_uppercase().ends_with("FLAC"))
+        .unwrap_or(false)
+}
+fn entry_is_modified_after(last_update: SystemTime, entry: &DirEntry) -> bool {
+    entry
+        .metadata()
+        .map(|m| {
+            m.modified()
+                .map(|m| m.duration_since(last_update).is_ok())
+                .unwrap_or(false)
+        })
+        .unwrap_or(false)
 }
 
 const HELP_STR: &'static str = "
