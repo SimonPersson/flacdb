@@ -24,10 +24,10 @@ fn run() -> Result<(), error::Error> {
     {
         tx.execute(FLACS_SCHEMA, params![])?;
         tx.execute(UPDATES_SCHEMA, params![])?;
-	if rebuild {
-        tx.execute(TRUNCATE_FLACS_QUERY , params![])?;
-        tx.execute(TRUNCATE_UPDATES_QUERY, params![])?;
-	}
+        if rebuild {
+            tx.execute(TRUNCATE_FLACS_QUERY, params![])?;
+            tx.execute(TRUNCATE_UPDATES_QUERY, params![])?;
+        }
         let last_update: Option<i64> = tx.query_row(
             "select coalesce(max(timestamp),0) from update_history;",
             NO_PARAMS,
@@ -35,7 +35,9 @@ fn run() -> Result<(), error::Error> {
         )?;
         let last_update = epoch_to_system_time(last_update.unwrap_or(0) as u64);
 
-        let mut stmt = tx.prepare("insert into flacs(file_dir, file_path, key, value) values (?1, ?2, ?3, ?4)")?;
+        let mut stmt = tx.prepare(
+            "insert into flacs(file_dir, file_path, key, value) values (?1, ?2, ?3, ?4)",
+        )?;
 
         for file in WalkDir::new(flac_path)
             .follow_links(true)
@@ -50,7 +52,15 @@ fn run() -> Result<(), error::Error> {
             if let Ok(file) = file {
                 let mut vorbis_comments = metaflac::read_from(file.path().into(), &mut v)?;
                 while let Ok(Some((key, val))) = vorbis_comments.next(&v) {
-                    stmt.execute(params![file.path().parent().map(|p| p.to_string_lossy()).unwrap_or_else(|| "".into()), file.path().to_string_lossy(), key, val])?;
+                    stmt.execute(params![
+                        file.path()
+                            .parent()
+                            .map(|p| p.to_string_lossy())
+                            .unwrap_or_else(|| "".into()),
+                        file.path().to_string_lossy(),
+                        key,
+                        val
+                    ])?;
                 }
             }
         }
