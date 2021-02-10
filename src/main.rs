@@ -13,7 +13,7 @@ fn main() {
 
 fn run() -> Result<(), error::Error> {
     let args = lapp::parse_args(HELP_STR);
-    let flac_path = args.get_string("dir");
+    let flac_paths = args.get_strings("dir");
     let db_path = args.get_string("db");
     let mut v = vec![];
 
@@ -27,16 +27,17 @@ fn run() -> Result<(), error::Error> {
             "insert into flacs(file_dir, file_path, key, value) values (?1, ?2, ?3, ?4)",
         )?;
 
-        for file in WalkDir::new(flac_path)
-            .follow_links(true)
-            .into_iter()
-            .filter_entry(|e| filter(last_update, e))
-            .filter(|re| {
-                re.as_ref()
-                    .map(|e| e.file_type().is_file())
-                    .unwrap_or(false)
-            })
-        {
+        let iter = flac_paths.into_iter().flat_map(|p| {
+            WalkDir::new(p)
+                .follow_links(true)
+                .into_iter()
+                .filter_entry(filter)
+        });
+        for file in iter.filter(|re| {
+            re.as_ref()
+                .map(|e| e.file_type().is_file())
+                .unwrap_or(false)
+        }) {
             if let Ok(file) = file {
                 let mut vorbis_comments = metaflac::read_from(file.path().into(), &mut v)?;
                 while let Ok(Some((key, val))) = vorbis_comments.next(&v) {
@@ -73,8 +74,8 @@ fn entry_is_flac(entry: &DirEntry) -> bool {
 const HELP_STR: &str = "
 Searches directory for flac files and inserts their metadata to a sqlite database:
 Usage: flacdb --db flacdb.sqlite <dir>
-    <dir> (string) directories containing flac files
-    <db> (string) path to a database file (will be created if it does not exist)";
+    --db (string) path to a database file (will be created if it does not exist)
+    <dir> (string...) directories containing flac files";
 
 const FLACS_SCHEMA: &str = "create table if not exists flacs(file_dir, file_path, key, value);";
 const TRUNCATE_FLACS_QUERY: &str = "delete from flacs;";
